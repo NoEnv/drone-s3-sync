@@ -1,4 +1,4 @@
-[![Docker Pulls](https://badgen.net/docker/pulls/noenv/nomad)](https://hub.docker.com/r/noenv/nomad)
+[![Docker Pulls](https://badgen.net/docker/pulls/noenv/s3-sync)](https://hub.docker.com/r/noenv/s3-sync)
 
 ## drone-s3-sync
 
