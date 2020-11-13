@@ -44,6 +44,23 @@ docker run --rm \
   noenv/s3-sync
 ```
 
+#### Debug
+
+```console
+DEBUG=1 ./release/linux/amd64/drone-s3-sync \
+  --access-key <access_key> \
+  --secret-key <secret_key> \
+  --bucket <bucket> \
+  --region <region> \
+  --source . \
+  --target / \
+  --access public-read \
+  --content-type '{".txt":"text/plain"}' \
+  --cache-control '{"*.txt":"max-age=3600"}' \
+  --delete \
+  --dry-run
+```
+
 #### Source
 
 https://github.com/noenv/drone-s3-sync

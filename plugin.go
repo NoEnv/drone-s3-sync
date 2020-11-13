@@ -70,7 +70,7 @@ func (p *Plugin) sanitizeInputs() error {
 		return err
 	}
 	p.Source = filepath.Join(wd, p.Source)
-	p.Target = filepath.Join(p.Target)
+	p.Target = strings.TrimPrefix(p.Target, string(os.PathSeparator))
 
 	return nil
 }
