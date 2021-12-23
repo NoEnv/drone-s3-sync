@@ -1,4 +1,4 @@
-FROM golang:1.17 as builder
+FROM golang:1.17-alpine3.15 as builder
 
 ARG VERSION=1.0.2
 
@@ -7,7 +7,7 @@ ADD . /go/src/github.com/noenv/drone-s3-sync
 
 RUN go vet ./... \
   && go test -cover ./... \
-  && CGO_ENABLED=0 GO111MODULE=on go build -v -ldflags "-X main.version=${VERSION}" -a -tags netgo -o release/linux/amd64/drone-s3-sync
+  && CGO_ENABLED=0 go build -v -ldflags "-X main.version=${VERSION}" -a -tags netgo -o release/drone-s3-sync
 
 FROM plugins/base:multiarch
 
@@ -16,6 +16,6 @@ LABEL maintainer="Lukas Prettenthaler <lukas@noenv.com>" \
   org.label-schema.vendor="NoEnv" \
   org.label-schema.schema-version="1.0"
 
-COPY --from=builder /go/src/github.com/noenv/drone-s3-sync/release/linux/amd64/drone-s3-sync /bin/
+COPY --from=builder /go/src/github.com/noenv/drone-s3-sync/release/drone-s3-sync /bin/
 
 ENTRYPOINT ["/bin/drone-s3-sync"]
