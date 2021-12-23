@@ -12,7 +12,7 @@ on:
 
 env:
   IMAGE_OWNER: noenv
-  IMAGE_NAME: drone-s3-sync
+  IMAGE_NAME: s3-sync
 
 jobs:
   build:
