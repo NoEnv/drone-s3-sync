@@ -1,13 +1,13 @@
 module github.com/noenv/drone-s3-sync
 
-go 1.18
+go 1.19
 
 require (
-	github.com/aws/aws-sdk-go v1.44.5
+	github.com/aws/aws-sdk-go v1.44.100
 	github.com/joho/godotenv v1.4.0
 	github.com/ryanuber/go-glob v1.0.0
-	github.com/sirupsen/logrus v1.8.1
-	github.com/urfave/cli v1.22.8
+	github.com/sirupsen/logrus v1.9.0
+	github.com/urfave/cli v1.22.10
 )
 
 require (
@@ -15,5 +15,5 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/russross/blackfriday/v2 v2.0.1 // indirect
 	github.com/shurcooL/sanitized_anchor_name v1.0.0 // indirect
-	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e // indirect
+	golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8 // indirect
 )
