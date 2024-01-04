@@ -1,6 +1,6 @@
-FROM golang:1.19 as builder
+FROM golang:1.21 as builder
 
-ARG VERSION=1.0.7
+ARG VERSION=1.0.8
 
 WORKDIR /go/src/github.com/noenv/drone-s3-sync
 ADD . /go/src/github.com/noenv/drone-s3-sync
