@@ -51,7 +51,7 @@ func (p *Plugin) Exec() error {
 		os.Exit(1)
 	}
 
-	p.jobs = make([]job, 1, 1)
+	p.jobs = make([]job, 1)
 	p.client = NewAWS(p)
 
 	p.createSyncJobs()
@@ -82,7 +82,7 @@ func (p *Plugin) createSyncJobs() {
 		os.Exit(1)
 	}
 
-	local := make([]string, 1, 1)
+	local := make([]string, 1)
 
 	err = filepath.Walk(p.Source, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {

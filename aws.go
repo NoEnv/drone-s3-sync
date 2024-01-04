@@ -48,8 +48,8 @@ func NewAWS(p *Plugin) AWS {
 
 	c := s3.New(sess)
 	cf := cloudfront.New(sess)
-	r := make([]string, 1, 1)
-	l := make([]string, 1, 1)
+	r := make([]string, 1)
+	l := make([]string, 1)
 
 	return AWS{c, cf, r, l, p}
 }
@@ -69,7 +69,7 @@ func (a *AWS) Upload(local, remote string) error {
 
 	var access string
 	for pattern := range p.Access {
-		if match := glob.Glob(pattern, local); match == true {
+		if match := glob.Glob(pattern, local); match {
 			access = p.Access[pattern]
 			break
 		}
@@ -103,7 +103,7 @@ func (a *AWS) Upload(local, remote string) error {
 
 	var cacheControl string
 	for pattern := range p.CacheControl {
-		if match := glob.Glob(pattern, local); match == true {
+		if match := glob.Glob(pattern, local); match {
 			cacheControl = p.CacheControl[pattern]
 			break
 		}
@@ -111,7 +111,7 @@ func (a *AWS) Upload(local, remote string) error {
 
 	metadata := map[string]*string{}
 	for pattern := range p.Metadata {
-		if match := glob.Glob(pattern, local); match == true {
+		if match := glob.Glob(pattern, local); match {
 			for k, v := range p.Metadata[pattern] {
 				metadata[k] = aws.String(v)
 			}
@@ -228,10 +228,6 @@ func (a *AWS) Upload(local, remote string) error {
 						} else if *g.Permission == "WRITE" {
 							previousAccess = "public-read-write"
 						}
-					} else if *gt.URI == "http://acs.amazonaws.com/groups/global/AllUsers" {
-						if *g.Permission == "READ" {
-							previousAccess = "authenticated-read"
-						}
 					}
 				}
 			}
@@ -341,7 +337,7 @@ func (a *AWS) Delete(remote string) error {
 
 func (a *AWS) List(path string) ([]string, error) {
 	p := a.plugin
-	remote := make([]string, 1, 1)
+	remote := make([]string, 1)
 	resp, err := a.client.ListObjects(&s3.ListObjectsInput{
 		Bucket: aws.String(p.Bucket),
 		Prefix: aws.String(path),
