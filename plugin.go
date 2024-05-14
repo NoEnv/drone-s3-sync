@@ -34,6 +34,7 @@ type Plugin struct {
 type job struct {
 	local  string
 	remote string
+	paths  []string
 	action string
 }
 
@@ -143,8 +144,7 @@ func (p *Plugin) createSyncJobs() {
 func (p *Plugin) createInvalidateJob() {
 	if len(p.CloudFrontDistribution) > 0 {
 		p.jobs = append(p.jobs, job{
-			local:  "",
-			remote: filepath.Join(string(os.PathSeparator), p.Target, "*"),
+			paths:  []string{filepath.Join(string(os.PathSeparator), p.Target, "*")},
 			action: "invalidateCloudFront",
 		})
 	}
@@ -186,9 +186,9 @@ func (p *Plugin) runJobs() {
 	}
 
 	if invalidateJob != nil {
-		err := client.Invalidate(invalidateJob.remote)
+		err := client.Invalidate(invalidateJob.paths)
 		if err != nil {
-			fmt.Printf("ERROR: failed to %s %s to %s: %+v\n", invalidateJob.action, invalidateJob.local, invalidateJob.remote, err)
+			fmt.Printf("ERROR: failed to %s %s: %+v\n", invalidateJob.action, invalidateJob.paths, err)
 			os.Exit(1)
 		}
 	}

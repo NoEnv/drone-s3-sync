@@ -369,18 +369,20 @@ func (a *AWS) List(path string) ([]string, error) {
 	return remote, nil
 }
 
-func (a *AWS) Invalidate(invalidatePath string) error {
+func (a *AWS) Invalidate(invalidatePaths []string) error {
 	p := a.plugin
-	debug("Invalidating \"%s\"", invalidatePath)
+	debug("Invalidating \"%s\"", invalidatePaths)
+	items := make([]*string, 1)
+	for _, path := range invalidatePaths {
+		items = append(items, aws.String(path))
+	}
 	_, err := a.cfClient.CreateInvalidation(&cloudfront.CreateInvalidationInput{
 		DistributionId: aws.String(p.CloudFrontDistribution),
 		InvalidationBatch: &cloudfront.InvalidationBatch{
 			CallerReference: aws.String(time.Now().Format(time.RFC3339Nano)),
 			Paths: &cloudfront.Paths{
 				Quantity: aws.Int64(1),
-				Items: []*string{
-					aws.String(invalidatePath),
-				},
+				Items:    items,
 			},
 		},
 	})
