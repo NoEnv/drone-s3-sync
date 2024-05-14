@@ -6,9 +6,9 @@
 
 Drone plugin to synchronize a directory with an Amazon S3 Bucket.
 
-This is a fork of the official [plugin](http://plugins.drone.io/drone-plugins/drone-s3-sync/)
+This is a fork of the official [plugin](https://plugins.drone.io/plugins/s3-sync)
 
-#### Build
+#### Local Build
 
 Build the binary with the following command:
 
@@ -19,7 +19,7 @@ export GO111MODULE=on
 go build -v -a -tags netgo -o release/drone-s3-sync
 ```
 
-#### Docker
+#### Container Build
 
 Build the Docker image with the following command:
 
@@ -30,7 +30,7 @@ docker build \
   --file Dockerfile --tag noenv/s3-sync .
 ```
 
-#### Usage
+#### Container Usage
 
 ```console
 docker run --rm \
@@ -44,10 +44,48 @@ docker run --rm \
   noenv/s3-sync
 ```
 
+#### Drone Usage
+
+```yaml
+kind: pipeline
+name: default
+
+steps:
+  - name: sync
+    image: noenv/s3-sync
+    settings:
+      acl:
+        "public/*": public-read
+        "private/*": private
+      access_key: AKIIZ3SQTZFDACSWPFSX
+      secret_key:
+        from_secret: aws_secret_access_key
+      region: us-east-1
+      bucket: my-bucket.s3-website-us-east-1.amazonaws.com
+      cloudfront_distribution: E315A6KO9N36VD
+      content_type:
+        ".json": application/json
+        ".svg": image/svg+xml
+      cache_control:
+        "*.json": "public, max-age=31536000"
+      content_encoding:
+        ".js": gzip
+        ".css": gzip
+      metadata:
+        "*.png":
+          CustomHeader: abc123
+      redirects:
+        "some/missing/file": /somewhere/that/actually/exists
+      source: folder/to/archive
+      target: target/location
+      delete: true
+      dry_run: false
+```
+
 #### Debug
 
 ```console
-DEBUG=1 ./release/linux/amd64/drone-s3-sync \
+DEBUG=1 ./release/drone-s3-sync \
   --access-key <access_key> \
   --secret-key <secret_key> \
   --bucket <bucket> \
