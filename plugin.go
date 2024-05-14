@@ -163,12 +163,16 @@ func (p *Plugin) runJobs() {
 			var err error
 			if j.action == "upload" {
 				err = client.Upload(j.local, j.remote)
+				fmt.Printf("u")
 			} else if j.action == "redirect" {
 				err = client.Redirect(j.local, j.remote)
+				fmt.Printf("r")
 			} else if j.action == "delete" {
 				err = client.Delete(j.remote)
+				fmt.Printf("d")
 			} else if j.action == "invalidateCloudFront" {
 				invalidateJob = &j
+				fmt.Printf("i")
 			} else {
 				err = nil
 			}
@@ -197,7 +201,5 @@ func (p *Plugin) runJobs() {
 func debug(format string, args ...interface{}) {
 	if os.Getenv("DEBUG") != "" {
 		fmt.Printf(format+"\n", args...)
-	} else {
-		fmt.Printf(".")
 	}
 }
