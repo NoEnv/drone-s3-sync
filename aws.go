@@ -372,7 +372,7 @@ func (a *AWS) List(path string) ([]string, error) {
 func (a *AWS) Invalidate(invalidatePaths []string) error {
 	p := a.plugin
 	debug("Invalidating \"%s\"", invalidatePaths)
-	items := make([]*string, 1)
+	items := make([]*string, 0)
 	for _, path := range invalidatePaths {
 		items = append(items, aws.String(path))
 	}
@@ -381,7 +381,7 @@ func (a *AWS) Invalidate(invalidatePaths []string) error {
 		InvalidationBatch: &cloudfront.InvalidationBatch{
 			CallerReference: aws.String(time.Now().Format(time.RFC3339Nano)),
 			Paths: &cloudfront.Paths{
-				Quantity: aws.Int64(1),
+				Quantity: aws.Int64(int64(len(items))),
 				Items:    items,
 			},
 		},
