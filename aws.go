@@ -44,12 +44,12 @@ func NewAWS(p *Plugin) AWS {
 		sessCfg.Credentials = credentials.NewStaticCredentials(p.Key, p.Secret, "")
 	}
 
-	sess := session.New(sessCfg)
+	sess, _ := session.NewSession(sessCfg)
 
 	c := s3.New(sess)
 	cf := cloudfront.New(sess)
-	r := make([]string, 1)
-	l := make([]string, 1)
+	r := make([]string, 0)
+	l := make([]string, 0)
 
 	return AWS{c, cf, r, l, p}
 }
@@ -337,7 +337,7 @@ func (a *AWS) Delete(remote string) error {
 
 func (a *AWS) List(path string) ([]string, error) {
 	p := a.plugin
-	remote := make([]string, 1)
+	remote := make([]string, 0)
 	resp, err := a.client.ListObjects(&s3.ListObjectsInput{
 		Bucket: aws.String(p.Bucket),
 		Prefix: aws.String(path),
