@@ -22,8 +22,6 @@ import (
 type AWS struct {
 	client   *s3.S3
 	cfClient *cloudfront.CloudFront
-	remote   []string
-	local    []string
 	plugin   *Plugin
 }
 
@@ -48,10 +46,8 @@ func NewAWS(p *Plugin) AWS {
 
 	c := s3.New(sess)
 	cf := cloudfront.New(sess)
-	r := make([]string, 0)
-	l := make([]string, 0)
 
-	return AWS{c, cf, r, l, p}
+	return AWS{c, cf, p}
 }
 
 func (a *AWS) Upload(local, remote string) error {
