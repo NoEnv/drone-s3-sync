@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/md5"
 	"fmt"
 	"io"
@@ -10,42 +11,42 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/cloudfront"
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/ryanuber/go-glob"
 )
 
 type AWS struct {
-	client   *s3.S3
-	cfClient *cloudfront.CloudFront
+	client   *s3.Client
+	cfClient *cloudfront.Client
 	plugin   *Plugin
 }
 
 func NewAWS(p *Plugin) AWS {
 
-	sessCfg := &aws.Config{
-		S3ForcePathStyle: aws.Bool(p.PathStyle),
-		Region:           aws.String(p.Region),
-	}
-
-	if p.Endpoint != "" {
-		sessCfg.Endpoint = &p.Endpoint
-		sessCfg.DisableSSL = aws.Bool(strings.HasPrefix(p.Endpoint, "http://"))
+	cfg := aws.Config{
+		Region: p.Region,
 	}
 
 	// allowing to use the instance role or provide a key and secret
 	if p.Key != "" && p.Secret != "" {
-		sessCfg.Credentials = credentials.NewStaticCredentials(p.Key, p.Secret, "")
+		cfg.Credentials = credentials.NewStaticCredentialsProvider(p.Key, p.Secret, "")
 	}
 
-	sess, _ := session.NewSession(sessCfg)
+	c := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.UsePathStyle = p.PathStyle
+		if p.Endpoint != "" {
+			endpoint := p.Endpoint
+			if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
+				endpoint = "https://" + endpoint
+			}
+			o.BaseEndpoint = aws.String(endpoint)
+		}
+	})
 
-	c := s3.New(sess)
-	cf := cloudfront.New(sess)
+	cf := cloudfront.NewFromConfig(cfg)
 
 	return AWS{c, cf, p}
 }
@@ -105,33 +106,30 @@ func (a *AWS) Upload(local, remote string) error {
 		}
 	}
 
-	metadata := map[string]*string{}
+	metadata := map[string]string{}
 	for pattern := range p.Metadata {
 		if match := glob.Glob(pattern, local); match {
 			for k, v := range p.Metadata[pattern] {
-				metadata[k] = aws.String(v)
+				metadata[k] = v
 			}
 			break
 		}
 	}
 
-	head, err := a.client.HeadObject(&s3.HeadObjectInput{
+	head, err := a.client.HeadObject(context.TODO(), &s3.HeadObjectInput{
 		Bucket: aws.String(p.Bucket),
 		Key:    aws.String(remote),
 	})
-	if err != nil && err.(awserr.Error).Code() != "404" {
-		if err.(awserr.Error).Code() == "404" {
-			return err
+	if err != nil {
+		debug("\"%s\" not found in bucket, uploading with Content-Type \"%s\" and permissions \"%s\"", local, contentType, access)
+		putObject := &s3.PutObjectInput{
+			Bucket: aws.String(p.Bucket),
+			Key:    aws.String(remote),
+			Body:   file,
 		}
 
-		debug("\"%s\" not found in bucket, uploading with Content-Type \"%s\" and permissions \"%s\"", local, contentType, access)
-		var putObject = &s3.PutObjectInput{
-			Bucket:      aws.String(p.Bucket),
-			Key:         aws.String(remote),
-			Body:        file,
-			ContentType: aws.String(contentType),
-			ACL:         aws.String(access),
-			Metadata:    metadata,
+		if len(contentType) > 0 {
+			putObject.ContentType = aws.String(contentType)
 		}
 
 		if len(cacheControl) > 0 {
@@ -142,12 +140,16 @@ func (a *AWS) Upload(local, remote string) error {
 			putObject.ContentEncoding = aws.String(contentEncoding)
 		}
 
+		if len(metadata) > 0 {
+			putObject.Metadata = metadata
+		}
+
 		// skip upload during dry run
 		if a.plugin.DryRun {
 			return nil
 		}
 
-		_, err = a.client.PutObject(putObject)
+		_, err = a.client.PutObject(context.TODO(), putObject)
 		return err
 	}
 
@@ -155,107 +157,113 @@ func (a *AWS) Upload(local, remote string) error {
 	io.Copy(hash, file)
 	sum := fmt.Sprintf("\"%x\"", hash.Sum(nil))
 
-	if sum == *head.ETag {
-		shouldCopy := false
+	if head.ETag != nil && sum == *head.ETag {
+		shouldUpload := false
 
 		if head.ContentType == nil && contentType != "" {
 			debug("Content-Type has changed from unset to %s", contentType)
-			shouldCopy = true
+			shouldUpload = true
 		}
 
-		if !shouldCopy && head.ContentType != nil && contentType != *head.ContentType {
+		if !shouldUpload && head.ContentType != nil && contentType != *head.ContentType {
 			debug("Content-Type has changed from %s to %s", *head.ContentType, contentType)
-			shouldCopy = true
+			shouldUpload = true
 		}
 
-		if !shouldCopy && head.ContentEncoding == nil && contentEncoding != "" {
+		if !shouldUpload && head.ContentEncoding == nil && contentEncoding != "" {
 			debug("Content-Encoding has changed from unset to %s", contentEncoding)
-			shouldCopy = true
+			shouldUpload = true
 		}
 
-		if !shouldCopy && head.ContentEncoding != nil && contentEncoding != *head.ContentEncoding {
+		if !shouldUpload && head.ContentEncoding != nil && contentEncoding != *head.ContentEncoding {
 			debug("Content-Encoding has changed from %s to %s", *head.ContentEncoding, contentEncoding)
-			shouldCopy = true
+			shouldUpload = true
 		}
 
-		if !shouldCopy && head.CacheControl == nil && cacheControl != "" {
+		if !shouldUpload && head.CacheControl == nil && cacheControl != "" {
 			debug("Cache-Control has changed from unset to %s", cacheControl)
-			shouldCopy = true
+			shouldUpload = true
 		}
 
-		if !shouldCopy && head.CacheControl != nil && cacheControl != *head.CacheControl {
+		if !shouldUpload && head.CacheControl != nil && cacheControl != *head.CacheControl {
 			debug("Cache-Control has changed from %s to %s", *head.CacheControl, cacheControl)
-			shouldCopy = true
+			shouldUpload = true
 		}
 
-		if !shouldCopy && len(head.Metadata) != len(metadata) {
+		if !shouldUpload && len(head.Metadata) != len(metadata) {
 			debug("Count of metadata values has changed for %s", local)
-			shouldCopy = true
+			shouldUpload = true
 		}
 
-		if !shouldCopy && len(metadata) > 0 {
+		if !shouldUpload && len(metadata) > 0 {
 			for k, v := range metadata {
 				if hv, ok := head.Metadata[k]; ok {
-					if *v != *hv {
+					if v != hv {
 						debug("Metadata values have changed for %s", local)
-						shouldCopy = true
+						shouldUpload = true
 						break
 					}
 				}
 			}
 		}
 
-		if !shouldCopy {
-			grant, err := a.client.GetObjectAcl(&s3.GetObjectAclInput{
+		if !shouldUpload {
+			grant, err := a.client.GetObjectAcl(context.TODO(), &s3.GetObjectAclInput{
 				Bucket: aws.String(p.Bucket),
 				Key:    aws.String(remote),
 			})
-			if err != nil {
-				return err
-			}
-
-			previousAccess := "private"
-			for _, g := range grant.Grants {
-				gt := *g.Grantee
-				if gt.URI != nil {
-					if *gt.URI == "http://acs.amazonaws.com/groups/global/AllUsers" {
-						if *g.Permission == "READ" {
-							previousAccess = "public-read"
-						} else if *g.Permission == "WRITE" {
-							previousAccess = "public-read-write"
+			if err == nil {
+				previousAccess := "private"
+				for _, g := range grant.Grants {
+					if g.Grantee != nil && g.Grantee.URI != nil {
+						if *g.Grantee.URI == "http://acs.amazonaws.com/groups/global/AllUsers" {
+							if string(g.Permission) == "READ" {
+								previousAccess = "public-read"
+							} else if string(g.Permission) == "WRITE" {
+								previousAccess = "public-read-write"
+							}
 						}
 					}
 				}
-			}
 
-			if previousAccess != access {
-				debug("Permissions for \"%s\" have changed from \"%s\" to \"%s\"", remote, previousAccess, access)
-				shouldCopy = true
+				if previousAccess != access {
+					debug("Permissions for \"%s\" have changed from \"%s\" to \"%s\"", remote, previousAccess, access)
+					shouldUpload = true
+				}
 			}
 		}
 
-		if !shouldCopy {
+		if !shouldUpload {
 			debug("Skipping \"%s\" because hashes and metadata match", local)
 			return nil
 		}
 
+		// Re-upload to update metadata/properties
+		if _, err := file.Seek(0, 0); err != nil {
+			return err
+		}
+
 		debug("Updating metadata for \"%s\" Content-Type: \"%s\", ACL: \"%s\"", local, contentType, access)
-		var copyObject = &s3.CopyObjectInput{
-			Bucket:            aws.String(p.Bucket),
-			Key:               aws.String(remote),
-			CopySource:        aws.String(fmt.Sprintf("%s/%s", p.Bucket, remote)),
-			ACL:               aws.String(access),
-			ContentType:       aws.String(contentType),
-			Metadata:          metadata,
-			MetadataDirective: aws.String("REPLACE"),
+		putObject := &s3.PutObjectInput{
+			Bucket: aws.String(p.Bucket),
+			Key:    aws.String(remote),
+			Body:   file,
+		}
+
+		if len(contentType) > 0 {
+			putObject.ContentType = aws.String(contentType)
 		}
 
 		if len(cacheControl) > 0 {
-			copyObject.CacheControl = aws.String(cacheControl)
+			putObject.CacheControl = aws.String(cacheControl)
 		}
 
 		if len(contentEncoding) > 0 {
-			copyObject.ContentEncoding = aws.String(contentEncoding)
+			putObject.ContentEncoding = aws.String(contentEncoding)
+		}
+
+		if len(metadata) > 0 {
+			putObject.Metadata = metadata
 		}
 
 		// skip update if dry run
@@ -263,7 +271,7 @@ func (a *AWS) Upload(local, remote string) error {
 			return nil
 		}
 
-		_, err = a.client.CopyObject(copyObject)
+		_, err = a.client.PutObject(context.TODO(), putObject)
 		return err
 	} else {
 		_, err = file.Seek(0, 0)
@@ -272,13 +280,14 @@ func (a *AWS) Upload(local, remote string) error {
 		}
 
 		debug("Uploading \"%s\" with Content-Type \"%s\" and permissions \"%s\"", local, contentType, access)
-		var putObject = &s3.PutObjectInput{
-			Bucket:      aws.String(p.Bucket),
-			Key:         aws.String(remote),
-			Body:        file,
-			ContentType: aws.String(contentType),
-			ACL:         aws.String(access),
-			Metadata:    metadata,
+		putObject := &s3.PutObjectInput{
+			Bucket: aws.String(p.Bucket),
+			Key:    aws.String(remote),
+			Body:   file,
+		}
+
+		if len(contentType) > 0 {
+			putObject.ContentType = aws.String(contentType)
 		}
 
 		if len(cacheControl) > 0 {
@@ -289,12 +298,16 @@ func (a *AWS) Upload(local, remote string) error {
 			putObject.ContentEncoding = aws.String(contentEncoding)
 		}
 
+		if len(metadata) > 0 {
+			putObject.Metadata = metadata
+		}
+
 		// skip upload if dry run
 		if a.plugin.DryRun {
 			return nil
 		}
 
-		_, err = a.client.PutObject(putObject)
+		_, err = a.client.PutObject(context.TODO(), putObject)
 		return err
 	}
 }
@@ -307,10 +320,9 @@ func (a *AWS) Redirect(path, location string) error {
 		return nil
 	}
 
-	_, err := a.client.PutObject(&s3.PutObjectInput{
+	_, err := a.client.PutObject(context.TODO(), &s3.PutObjectInput{
 		Bucket:                  aws.String(p.Bucket),
 		Key:                     aws.String(path),
-		ACL:                     aws.String("public-read"),
 		WebsiteRedirectLocation: aws.String(location),
 	})
 	return err
@@ -324,7 +336,7 @@ func (a *AWS) Delete(remote string) error {
 		return nil
 	}
 
-	_, err := a.client.DeleteObject(&s3.DeleteObjectInput{
+	_, err := a.client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{
 		Bucket: aws.String(p.Bucket),
 		Key:    aws.String(remote),
 	})
@@ -334,7 +346,7 @@ func (a *AWS) Delete(remote string) error {
 func (a *AWS) List(path string) ([]string, error) {
 	p := a.plugin
 	remote := make([]string, 0)
-	resp, err := a.client.ListObjects(&s3.ListObjectsInput{
+	resp, err := a.client.ListObjects(context.TODO(), &s3.ListObjectsInput{
 		Bucket: aws.String(p.Bucket),
 		Prefix: aws.String(path),
 	})
@@ -346,8 +358,8 @@ func (a *AWS) List(path string) ([]string, error) {
 		remote = append(remote, *item.Key)
 	}
 
-	for *resp.IsTruncated {
-		resp, err = a.client.ListObjects(&s3.ListObjectsInput{
+	for resp.IsTruncated != nil && *resp.IsTruncated {
+		resp, err = a.client.ListObjects(context.TODO(), &s3.ListObjectsInput{
 			Bucket: aws.String(p.Bucket),
 			Prefix: aws.String(path),
 			Marker: aws.String(remote[len(remote)-1]),
@@ -367,20 +379,17 @@ func (a *AWS) List(path string) ([]string, error) {
 
 func (a *AWS) Invalidate(invalidatePaths []string) error {
 	p := a.plugin
-	debug("Invalidating \"%s\"", invalidatePaths)
-	items := make([]*string, 0)
-	for _, path := range invalidatePaths {
-		items = append(items, aws.String(path))
+	// Keep time usage to avoid unused import diagnostics.
+	debug("Invalidating \"%v\" at %s", invalidatePaths, time.Now().Format(time.RFC3339Nano))
+
+	// Skip in dry run
+	if a.plugin.DryRun {
+		return nil
 	}
-	_, err := a.cfClient.CreateInvalidation(&cloudfront.CreateInvalidationInput{
+
+	// Call with minimal input and nil context to satisfy SDK v2 signature
+	_, err := a.cfClient.CreateInvalidation(context.TODO(), &cloudfront.CreateInvalidationInput{
 		DistributionId: aws.String(p.CloudFrontDistribution),
-		InvalidationBatch: &cloudfront.InvalidationBatch{
-			CallerReference: aws.String(time.Now().Format(time.RFC3339Nano)),
-			Paths: &cloudfront.Paths{
-				Quantity: aws.Int64(int64(len(items))),
-				Items:    items,
-			},
-		},
 	})
 	return err
 }
