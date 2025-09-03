@@ -1,6 +1,6 @@
 module github.com/noenv/drone-s3-sync
 
-go 1.24
+go 1.25
 
 require (
 	github.com/aws/aws-sdk-go v1.55.8
