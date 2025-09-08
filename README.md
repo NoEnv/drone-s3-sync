@@ -1,6 +1,7 @@
 [![Docker Pulls](https://badgen.net/docker/pulls/noenv/s3-sync)](https://hub.docker.com/r/noenv/s3-sync)
 [![Quay.io Enabled](https://badgen.net/badge/quay%20pulls/enabled/green)](https://quay.io/repository/noenv/s3-sync)
 [![build](https://github.com/NoEnv/drone-s3-sync/actions/workflows/build.yml/badge.svg)](https://github.com/NoEnv/drone-s3-sync/actions/workflows/build.yml)
+[![Discord](https://badgen.net/discord/online-members/mZAjkQfYSj)](https://discord.gg/mZAjkQfYSj)
 
 ## drone-s3-sync
 
