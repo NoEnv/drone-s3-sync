@@ -1,12 +1,12 @@
 module github.com/noenv/drone-s3-sync
 
-go 1.25
+go 1.26
 
 require (
 	github.com/aws/aws-sdk-go v1.55.8
 	github.com/joho/godotenv v1.5.1
 	github.com/ryanuber/go-glob v1.0.0
-	github.com/sirupsen/logrus v1.9.3
+	github.com/sirupsen/logrus v1.9.4
 	github.com/urfave/cli v1.22.17
 )
 
