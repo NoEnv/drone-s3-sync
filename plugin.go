@@ -76,8 +76,41 @@ func (p *Plugin) sanitizeInputs() error {
 	return nil
 }
 
+// listPrefix returns the S3 key prefix used to list the objects that belong to
+// target. It always ends with a "/" (unless target is the bucket root), so
+// syncing to "a/b" does not also match sibling prefixes such as "a/b-other/".
+func listPrefix(target string) string {
+	target = strings.Trim(target, "/")
+	if target == "" {
+		return ""
+	}
+	return target + "/"
+}
+
+// deleteCandidates returns the remote keys below target that have no
+// counterpart in local (paths relative to target).
+func deleteCandidates(remote []string, local []string, target string) []string {
+	prefix := listPrefix(target)
+	known := make(map[string]struct{}, len(local))
+	for _, l := range local {
+		known[l] = struct{}{}
+	}
+
+	candidates := make([]string, 0)
+	for _, r := range remote {
+		// never touch keys outside the target "directory"
+		if !strings.HasPrefix(r, prefix) {
+			continue
+		}
+		if _, found := known[strings.TrimPrefix(r, prefix)]; !found {
+			candidates = append(candidates, r)
+		}
+	}
+	return candidates
+}
+
 func (p *Plugin) createSyncJobs() {
-	remote, err := p.client.List(p.Target)
+	remote, err := p.client.List(listPrefix(p.Target))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -119,24 +152,12 @@ func (p *Plugin) createSyncJobs() {
 		})
 	}
 	if p.Delete {
-		for _, r := range remote {
-			found := false
-			matcher := strings.TrimPrefix(r, p.Target)
-			matcher = strings.TrimPrefix(matcher, string(os.PathSeparator))
-			for _, l := range local {
-				if l == matcher {
-					found = true
-					break
-				}
-			}
-
-			if !found {
-				p.jobs = append(p.jobs, job{
-					local:  "",
-					remote: r,
-					action: "delete",
-				})
-			}
+		for _, r := range deleteCandidates(remote, local, p.Target) {
+			p.jobs = append(p.jobs, job{
+				local:  "",
+				remote: r,
+				action: "delete",
+			})
 		}
 	}
 }
